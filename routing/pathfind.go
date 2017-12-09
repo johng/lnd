@@ -393,7 +393,7 @@ func edgeWeight(e *channeldb.ChannelEdgePolicy) float64 {
 // time-lock+fee costs along a particular edge. If a path is found, this
 // function returns a slice of ChannelHop structs which encoded the chosen path
 // from the target to the source.
-func findPath(tx *bolt.Tx, graph *channeldb.ChannelGraph,
+func findPath(tx *bolt.Tx, graph Graph,
 	sourceNode *channeldb.LightningNode, target *btcec.PublicKey,
 	ignoredNodes map[Vertex]struct{}, ignoredEdges map[uint64]struct{},
 	amt lnwire.MilliSatoshi) ([]*ChannelHop, error) {
@@ -588,7 +588,7 @@ func findPath(tx *bolt.Tx, graph *channeldb.ChannelGraph,
 // make our inner path finding algorithm aware of our k-shortest paths
 // algorithm, rather than attempting to use an unmodified path finding
 // algorithm in a block box manner.
-func findPaths(tx *bolt.Tx, graph *channeldb.ChannelGraph,
+func findPaths(tx *bolt.Tx, graph Graph,
 	source *channeldb.LightningNode, target *btcec.PublicKey,
 	amt lnwire.MilliSatoshi) ([][]*ChannelHop, error) {
 
