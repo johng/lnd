@@ -84,9 +84,11 @@ func createTestCtx(startingHeight uint32, testGraph ...string) (*testCtx, func()
 	// start out with. Our usage of a variadic parameter allows caller to
 	// omit the testGraph argument all together if they wish to start with
 	// a blank graph.
+
+	// First we'll set up a test graph for usage within the test.
+	graph, cleanup, err = makeChannelDBGraph()
+
 	if testGraph == nil {
-		// First we'll set up a test graph for usage within the test.
-		graph, cleanup, err = makeTestGraph()
 		if err != nil {
 			return nil, nil, fmt.Errorf("unable to create test graph: %v", err)
 		}
@@ -101,7 +103,7 @@ func createTestCtx(startingHeight uint32, testGraph ...string) (*testCtx, func()
 	} else {
 		// Otherwise, we'll attempt to locate and parse out the file
 		// that encodes the graph that our tests should be run against.
-		graph, cleanup, aliasMap, err = parseTestGraph(testGraph[0])
+		aliasMap, err = parseTestGraph(testGraph[0], graph)
 		if err != nil {
 			return nil, nil, fmt.Errorf("unable to create test graph: %v", err)
 		}

@@ -3,7 +3,6 @@ package routing
 import (
 	"sync"
 	"time"
-
 	"github.com/lightningnetwork/lnd/channeldb"
 )
 
@@ -51,7 +50,7 @@ type missionControl struct {
 	// to that particular vertex.
 	failedVertexes map[Vertex]time.Time
 
-	graph *channeldb.ChannelGraph
+	graph Graph
 
 	selfNode *channeldb.LightningNode
 
