@@ -459,6 +459,29 @@ func newFundingManager(cfg fundingConfig) (*fundingManager, error) {
 	}, nil
 }
 
+func closeChannel(channel *channeldb.OpenChannel) {
+
+	localBalance := channel.LocalCommitment.LocalBalance.ToSatoshis()
+	closeInfo := &channeldb.ChannelCloseSummary{
+		ChainHash:               channel.ChainHash,
+		ChanPoint:               channel.FundingOutpoint,
+		RemotePub:               channel.IdentityPub,
+		Capacity:                channel.Capacity,
+		SettledBalance:          localBalance,
+		CloseType:               channeldb.FundingCanceled,
+		RemoteCurrentRevocation: channel.RemoteCurrentRevocation,
+		RemoteNextRevocation:    channel.RemoteNextRevocation,
+		LocalChanConfig:         channel.LocalChanCfg,
+	}
+
+	if err := channel.CloseChannel(closeInfo); err != nil {
+		fndgLog.Errorf("Failed closing channel "+
+			"%v: %v", channel.FundingOutpoint, err)
+
+	}
+
+}
+
 // Start launches all helper goroutines required for handling requests sent
 // to the funding manager.
 func (f *fundingManager) Start() error {
@@ -522,23 +545,7 @@ func (f *fundingManager) Start() error {
 				// mined since the channel was initiated reaches
 				// maxWaitNumBlocksFundingConf and we are not the channel
 				// initiator.
-				localBalance := ch.LocalCommitment.LocalBalance.ToSatoshis()
-				closeInfo := &channeldb.ChannelCloseSummary{
-					ChainHash:               ch.ChainHash,
-					ChanPoint:               ch.FundingOutpoint,
-					RemotePub:               ch.IdentityPub,
-					Capacity:                ch.Capacity,
-					SettledBalance:          localBalance,
-					CloseType:               channeldb.FundingCanceled,
-					RemoteCurrentRevocation: ch.RemoteCurrentRevocation,
-					RemoteNextRevocation:    ch.RemoteNextRevocation,
-					LocalChanConfig:         ch.LocalChanCfg,
-				}
-
-				if err := ch.CloseChannel(closeInfo); err != nil {
-					fndgLog.Errorf("Failed closing channel "+
-						"%v: %v", ch.FundingOutpoint, err)
-				}
+				closeChannel(ch)
 
 			case <-f.quit:
 				// The fundingManager is shutting down, and will
@@ -1840,13 +1847,12 @@ func makeFundingScript(channel *channeldb.OpenChannel) ([]byte, error) {
 // when a channel has become active for lightning transactions.
 // The wait can be canceled by closing the cancelChan. In case of success,
 // a *lnwire.ShortChannelID will be passed to confChan.
-func (f *fundingManager) waitForFundingConfirmation(completeChan *channeldb.OpenChannel,
+func (f *fundingManager) waitForFundingConfirmation(
+	completeChan *channeldb.OpenChannel,
 	cancelChan <-chan struct{}, confChan chan<- *lnwire.ShortChannelID) {
 
 	defer close(confChan)
 
-	// Register with the ChainNotifier for a notification once the funding
-	// transaction reaches `numConfs` confirmations.
 	txid := completeChan.FundingOutpoint.Hash
 	fundingScript, err := makeFundingScript(completeChan)
 	if err != nil {
@@ -1854,14 +1860,48 @@ func (f *fundingManager) waitForFundingConfirmation(completeChan *channeldb.Open
 			"ChannelPoint(%v): %v", completeChan.FundingOutpoint, err)
 		return
 	}
+
 	numConfs := uint32(completeChan.NumConfsRequired)
+	fundingBroadcastHeight := completeChan.FundingBroadcastHeight
+
+	confDetails, ok := f.waitForTransactionConfirmed(
+		txid,
+		fundingScript,
+		numConfs,
+		fundingBroadcastHeight,
+		cancelChan,
+	)
+
+	if !ok {
+		return
+	}
+
+	shortChannelID, err := f.markChannelOpen(completeChan, confDetails)
+	if err != nil {
+		return
+	} else {
+		confChan <- &shortChannelID
+	}
+
+}
+
+// waitForTransactionConfirmed will wait until a transaction has reached the
+// required numbers of confirmations on the blockchain.
+func (f *fundingManager) waitForTransactionConfirmed(
+	txid chainhash.Hash,
+	fundingScript []byte,
+	numConfs, fundingBroadcastHeight uint32,
+	cancelChan <-chan struct{}) (*chainntnfs.TxConfirmation, bool) {
+
+	// Register with the ChainNotifier for a notification once the
+	// transaction reaches `numConfs` confirmations.
 	confNtfn, err := f.cfg.Notifier.RegisterConfirmationsNtfn(
-		&txid, fundingScript, numConfs, completeChan.FundingBroadcastHeight,
+		&txid, fundingScript, numConfs, fundingBroadcastHeight,
 	)
 	if err != nil {
 		fndgLog.Errorf("Unable to register for confirmation of "+
-			"ChannelPoint(%v)", completeChan.FundingOutpoint)
-		return
+			" transaction(%v)", txid)
+		return nil, false
 	}
 
 	fndgLog.Infof("Waiting for funding tx (%v) to reach %v confirmations",
@@ -1874,24 +1914,29 @@ func (f *fundingManager) waitForFundingConfirmation(completeChan *channeldb.Open
 	// we get a cancel signal, or the wallet signals a shutdown.
 	select {
 	case confDetails, ok = <-confNtfn.Confirmed:
-		// fallthrough
+
 	case <-cancelChan:
 		fndgLog.Warnf("canceled waiting for funding confirmation, "+
-			"stopping funding flow for ChannelPoint(%v)",
-			completeChan.FundingOutpoint)
-		return
+			"stopping funding flow for transaction(%v)", txid)
+
 	case <-f.quit:
 		fndgLog.Warnf("fundingManager shutting down, stopping funding "+
-			"flow for ChannelPoint(%v)", completeChan.FundingOutpoint)
-		return
+			"flow for transaction(%v)", txid)
 	}
 
 	if !ok {
 		fndgLog.Warnf("ChainNotifier shutting down, cannot complete "+
-			"funding flow for ChannelPoint(%v)",
-			completeChan.FundingOutpoint)
-		return
+			"funding flow for transaction(%v)", txid)
 	}
+
+	return confDetails, ok
+
+}
+
+func (f *fundingManager) markChannelOpen(
+	completeChan *channeldb.OpenChannel,
+	confDetails *chainntnfs.TxConfirmation,
+) (lnwire.ShortChannelID, error) {
 
 	fundingPoint := completeChan.FundingOutpoint
 	chanID := lnwire.NewChanIDFromOutPoint(&fundingPoint)
@@ -1913,7 +1958,7 @@ func (f *fundingManager) waitForFundingConfirmation(completeChan *channeldb.Open
 	if err := completeChan.MarkAsOpen(shortChanID); err != nil {
 		fndgLog.Errorf("error setting channel pending flag to false: "+
 			"%v", err)
-		return
+		return lnwire.ShortChannelID{}, err
 	}
 
 	// TODO(roasbeef): ideally persistent state update for chan above
@@ -1927,12 +1972,12 @@ func (f *fundingManager) waitForFundingConfirmation(completeChan *channeldb.Open
 	// TODO(halseth): make the two db transactions (MarkChannelAsOpen and
 	// saveChannelOpeningState) atomic by doing them in the same transaction.
 	// Needed to be properly fault-tolerant.
-	err = f.saveChannelOpeningState(&completeChan.FundingOutpoint, markedOpen,
+	err := f.saveChannelOpeningState(&completeChan.FundingOutpoint, markedOpen,
 		&shortChanID)
 	if err != nil {
 		fndgLog.Errorf("error setting channel state to markedOpen: %v",
 			err)
-		return
+		return lnwire.ShortChannelID{}, err
 	}
 
 	// As there might already be an active link in the switch with an
@@ -1941,12 +1986,7 @@ func (f *fundingManager) waitForFundingConfirmation(completeChan *channeldb.Open
 	err = f.cfg.ReportShortChanID(fundingPoint)
 	if err != nil {
 		fndgLog.Errorf("unable to report short chan id: %v", err)
-	}
-
-	select {
-	case confChan <- &shortChanID:
-	case <-f.quit:
-		return
+		return lnwire.ShortChannelID{}, err
 	}
 
 	// Close the discoverySignal channel, indicating to a separate
@@ -1958,6 +1998,9 @@ func (f *fundingManager) waitForFundingConfirmation(completeChan *channeldb.Open
 		close(discoverySignal)
 	}
 	f.localDiscoveryMtx.Unlock()
+
+	return shortChanID, nil
+
 }
 
 // handleFundingConfirmation is a wrapper method for creating a new
