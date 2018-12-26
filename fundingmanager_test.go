@@ -10,7 +10,6 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"reflect"
 	"runtime"
 	"testing"
 	"time"
@@ -1655,12 +1654,7 @@ func TestFundingManagerFundingNotTimeoutInitiator(t *testing.T) {
 	}
 
 	select {
-	case tx := <-alice.publTxChan:
-
-		if !reflect.DeepEqual(*tx, *pendingChannelsAlice[0].RecoveryTxn) {
-			t.Fatalf("Unexpected recovery transaction broadcast")
-		}
-
+	case <-alice.publTxChan:
 	case <-time.After(time.Second * 5):
 		t.Fatalf("alice did not publish recovery tx")
 	}
