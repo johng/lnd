@@ -2401,7 +2401,7 @@ func fetchChanInfo(chanBucket *bbolt.Bucket, channel *OpenChannel) error {
 
 	if channel.IsRecovering {
 		if err := ReadElements(r, &channel.RecoveryOutpoint,
-			channel.RecoveryTxn); err != nil {
+			&channel.RecoveryTxn); err != nil {
 			return err
 		}
 	}
