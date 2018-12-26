@@ -352,6 +352,8 @@ type OpenChannel struct {
 	// target blockchain as specified by the chain hash parameter.
 	FundingOutpoint wire.OutPoint
 
+	RecoveryOutpoint wire.OutPoint
+
 	// ShortChannelID encodes the exact location in the chain in which the
 	// channel was initially confirmed. This includes: the block height,
 	// transaction index, and the output within the target transaction.
@@ -453,6 +455,12 @@ type OpenChannel struct {
 	// NOTE: This value will only be populated for single-funder channels
 	// for which we are the initiator.
 	FundingTxn *wire.MsgTx
+
+	// Set if we're trying to recover funds from our initial funding transaction
+	IsRecovering bool
+
+	// Recovery Transaction
+	RecoveryTxn *wire.MsgTx
 
 	// TODO(roasbeef): eww
 	Db *DB
@@ -605,6 +613,43 @@ func (c *OpenChannel) fullSync(tx *bbolt.Tx) error {
 	}
 
 	return putOpenChannel(chanBucket, c)
+}
+
+func (c *OpenChannel) SetRecoveryTx(
+	recoveryOutPoint wire.OutPoint,
+	recoveryTxn *wire.MsgTx) error {
+
+	c.Lock()
+	defer c.Unlock()
+
+	if err := c.Db.Update(func(tx *bbolt.Tx) error {
+		chanBucket, err := fetchChanBucket(
+			tx, c.IdentityPub, &c.FundingOutpoint, c.ChainHash,
+		)
+		if err != nil {
+			return err
+		}
+
+		channel, err := fetchOpenChannel(chanBucket, &c.FundingOutpoint)
+		if err != nil {
+			return err
+		}
+
+		channel.RecoveryTxn = recoveryTxn
+		channel.RecoveryOutpoint = recoveryOutPoint
+		channel.IsRecovering = true
+
+		return putOpenChannel(chanBucket, channel)
+	}); err != nil {
+		return err
+	}
+
+	c.RecoveryTxn = recoveryTxn
+	c.RecoveryOutpoint = recoveryOutPoint
+	c.IsRecovering = true
+
+	return nil
+
 }
 
 // MarkAsOpen marks a channel as fully open given a locator that uniquely
@@ -2225,7 +2270,7 @@ func putChanInfo(chanBucket *bbolt.Bucket, channel *OpenChannel) error {
 		channel.chanStatus, channel.FundingBroadcastHeight,
 		channel.NumConfsRequired, channel.ChannelFlags,
 		channel.IdentityPub, channel.Capacity, channel.TotalMSatSent,
-		channel.TotalMSatReceived,
+		channel.TotalMSatReceived, channel.IsRecovering,
 	); err != nil {
 		return err
 	}
@@ -2233,6 +2278,13 @@ func putChanInfo(chanBucket *bbolt.Bucket, channel *OpenChannel) error {
 	// For single funder channels that we initiated, write the funding txn.
 	if channel.ChanType == SingleFunder && channel.IsInitiator {
 		if err := WriteElement(&w, channel.FundingTxn); err != nil {
+			return err
+		}
+	}
+
+	if channel.IsRecovering {
+		if err := WriteElements(&w, channel.RecoveryOutpoint,
+			channel.RecoveryTxn); err != nil {
 			return err
 		}
 	}
@@ -2335,7 +2387,7 @@ func fetchChanInfo(chanBucket *bbolt.Bucket, channel *OpenChannel) error {
 		&channel.chanStatus, &channel.FundingBroadcastHeight,
 		&channel.NumConfsRequired, &channel.ChannelFlags,
 		&channel.IdentityPub, &channel.Capacity, &channel.TotalMSatSent,
-		&channel.TotalMSatReceived,
+		&channel.TotalMSatReceived, &channel.IsRecovering,
 	); err != nil {
 		return err
 	}
@@ -2343,6 +2395,13 @@ func fetchChanInfo(chanBucket *bbolt.Bucket, channel *OpenChannel) error {
 	// For single funder channels that we initiated, read the funding txn.
 	if channel.ChanType == SingleFunder && channel.IsInitiator {
 		if err := ReadElement(r, &channel.FundingTxn); err != nil {
+			return err
+		}
+	}
+
+	if channel.IsRecovering {
+		if err := ReadElements(r, &channel.RecoveryOutpoint,
+			channel.RecoveryTxn); err != nil {
 			return err
 		}
 	}
