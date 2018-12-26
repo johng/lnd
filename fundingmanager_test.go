@@ -10,6 +10,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"testing"
 	"time"
@@ -1577,7 +1578,8 @@ func TestFundingManagerFundingTimeout(t *testing.T) {
 }
 
 // TestFundingManagerFundingNotTimeoutInitiator checks that if the user was
-// the channel initiator, that it does not timeout when the lnd restarts.
+// the channel initiator, that it does not timeout when the lnd restart and
+// we attempt to recover funds
 func TestFundingManagerFundingNotTimeoutInitiator(t *testing.T) {
 
 	alice, bob := setupFundingManagers(t, defaultMaxPendingChannels)
@@ -1592,13 +1594,14 @@ func TestFundingManagerFundingNotTimeoutInitiator(t *testing.T) {
 
 	// Alice will at this point be waiting for the funding transaction to be
 	// confirmed, so the channel should be considered pending.
-	pendingChannels, err := alice.fundingMgr.cfg.Wallet.Cfg.Database.FetchPendingChannels()
+	pendingChannelsAlice, err :=
+		alice.fundingMgr.cfg.Wallet.Cfg.Database.FetchPendingChannels()
 	if err != nil {
 		t.Fatalf("unable to fetch pending channels: %v", err)
 	}
-	if len(pendingChannels) != 1 {
+	if len(pendingChannelsAlice) != 1 {
 		t.Fatalf("Expected Alice to have 1 pending channel, had  %v",
-			len(pendingChannels))
+			len(pendingChannelsAlice))
 	}
 
 	recreateAliceFundingManager(t, alice)
@@ -1633,14 +1636,35 @@ func TestFundingManagerFundingNotTimeoutInitiator(t *testing.T) {
 		Height: fundingBroadcastHeight + maxWaitNumBlocksFundingConf,
 	}
 
-	// Since Alice was the initiator, the channel should not have timed out
-	assertNumPendingChannelsRemains(t, alice, 1)
-
 	// Bob should have sent an Error message to Alice.
 	assertErrorSent(t, bob.msgChan)
 
 	// Since Bob was not the initiator, the channel should timeout
 	assertNumPendingChannelsBecomes(t, bob, 0)
+
+	// Since Alice was the initiator, the channel should still
+	pendingChannelsAlice, err =
+		alice.fundingMgr.cfg.Wallet.Cfg.Database.FetchPendingChannels()
+
+	if err != nil {
+		t.Fatalf("unable to fetch pending channels: %v", err)
+	}
+	if len(pendingChannelsAlice) != 1 {
+		t.Fatalf("Expected Alice to have 1 pending channel, had  %v",
+			len(pendingChannelsAlice))
+	}
+
+	select {
+	case tx := <-alice.publTxChan:
+
+		if !reflect.DeepEqual(*tx, *pendingChannelsAlice[0].RecoveryTxn) {
+			t.Fatalf("Unexpected recovery transaction broadcast")
+		}
+
+	case <-time.After(time.Second * 5):
+		t.Fatalf("alice did not publish recovery tx")
+	}
+
 }
 
 // TestFundingManagerReceiveFundingLockedTwice checks that the fundingManager
