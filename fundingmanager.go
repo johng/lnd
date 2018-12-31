@@ -441,6 +441,68 @@ var (
 	ErrChannelNotFound = fmt.Errorf("channel not found")
 )
 
+func (f *fundingManager) startChannelRecovery(channel *channeldb.OpenChannel) error {
+
+	wireOut, txOut, err := f.cfg.Wallet.GetRecoveryTransaction(channel)
+
+	if err != nil {
+
+		fndgLog.Errorf(
+			"Failed to generate recovery"+
+				" transaction: %s", err.Error())
+		return err
+	}
+
+	err = channel.SetRecoveryTx(*wireOut, txOut)
+
+	if err != nil {
+		fndgLog.Errorf("Failed to updated channel recovery info %s ",
+			err.Error())
+		return err
+	}
+
+	err = f.cfg.PublishTransaction(channel.FundingTxn)
+
+	if err != nil && err != lnwallet.ErrDoubleSpend {
+		fndgLog.Errorf("Unable to broadcast recovery "+
+			"tx for ChannelPoint(%v): %v",
+			channel.RecoveryTxn, err)
+		return err
+	}
+
+	return nil
+
+}
+
+func (f *fundingManager) waitForChannelRecovery(channel *channeldb.OpenChannel) error {
+
+	txid := channel.RecoveryOutpoint.Hash
+	numConfs := uint32(channel.NumConfsRequired)
+	fundingBroadcastHeight := channel.FundingBroadcastHeight
+
+	cancelChan := make(chan struct{})
+
+	txConfirmation, ok := f.waitForTransactionConfirmed(
+		txid,
+		nil,
+		fundingBroadcastHeight,
+		numConfs,
+		cancelChan)
+
+	if !ok {
+		return fmt.Errorf("error waiting for recovery transaction (%v)",
+			txid)
+	}
+
+	fndgLog.Info("recovery transaction (%v) confirmed at height %v, closing "+
+		"channel", txid, txConfirmation.BlockHeight)
+
+	deleteChannelFromDatabase(channel)
+
+	return nil
+
+}
+
 // newFundingManager creates and initializes a new instance of the
 // fundingManager.
 func newFundingManager(cfg fundingConfig) (*fundingManager, error) {
@@ -522,61 +584,97 @@ func (f *fundingManager) Start() error {
 		// already broadcast this transaction. Otherwise, we simply log
 		// the error as there isn't anything we can currently do to
 		// recover.
-		if channel.ChanType == channeldb.SingleFunder &&
-			channel.IsInitiator {
+		if channel.ChanType == channeldb.SingleFunder {
 
-			err := f.cfg.PublishTransaction(channel.FundingTxn)
+			var tx *wire.MsgTx
+
+			if channel.IsRecovering {
+				tx = channel.RecoveryTxn
+			} else {
+				tx = channel.FundingTxn
+			}
+
+			err := f.cfg.PublishTransaction(tx)
+
 			if err != nil && err != lnwallet.ErrDoubleSpend {
-				fndgLog.Errorf("Unable to rebroadcast funding "+
-					"tx for ChannelPoint(%v): %v",
-					channel.FundingOutpoint, err)
+				fndgLog.Errorf("Unable to rebroadcast tx (%v) "+
+					"for ChannelPoint(%v): %v",
+					*tx,channel.FundingOutpoint, err)
 			}
 		}
 
-		confChan := make(chan *lnwire.ShortChannelID)
-		timeoutChan := make(chan struct{})
-
 		go func(ch *channeldb.OpenChannel) {
-			go f.waitForFundingWithTimeout(ch, confChan, timeoutChan)
 
-			select {
-			case <-timeoutChan:
-				// Timeout channel will be triggered if the number of blocks
-				// mined since the channel was initiated reaches
-				// maxWaitNumBlocksFundingConf and we are not the channel
-				// initiator.
-				deleteChannelFromDatabase(ch)
-
-			case <-f.quit:
-				// The fundingManager is shutting down, and will
-				// resume wait on startup.
-			case shortChanID, ok := <-confChan:
-				if !ok {
-					fndgLog.Errorf("Waiting for funding" +
-						"confirmation failed")
-					return
-				}
-
-				// The funding transaction has confirmed, so
-				// we'll attempt to retrieve the remote peer
-				// to complete the rest of the funding flow.
-				peerChan := make(chan lnpeer.Peer, 1)
-				f.cfg.NotifyWhenOnline(ch.IdentityPub, peerChan)
-
-				var peer lnpeer.Peer
-				select {
-				case peer = <-peerChan:
-				case <-f.quit:
-					return
-				}
-				err := f.handleFundingConfirmation(
-					peer, ch, shortChanID,
-				)
+			if ch.IsRecovering {
+				err = f.waitForChannelRecovery(ch)
 				if err != nil {
-					fndgLog.Errorf("Failed to handle "+
-						"funding confirmation: %v", err)
+					fndgLog.Error("Error waiting for channel "+
+						"recovery: %s", err.Error())
 					return
 				}
+			} else {
+
+				confChan := make(chan *lnwire.ShortChannelID)
+				timeoutChan := make(chan struct{})
+
+				go f.waitForFundingWithTimeout(ch, confChan, timeoutChan)
+
+				select {
+				case <-timeoutChan:
+					// Timeout channel will be triggered if the number of blocks
+					// mined since the channel was initiated reaches
+					// maxWaitNumBlocksFundingConf and we are not the channel
+					// initiator.
+
+					if !ch.IsInitiator {
+						deleteChannelFromDatabase(ch)
+					} else {
+						err := f.startChannelRecovery(ch)
+
+						if err != nil {
+							return
+						}
+						err = f.waitForChannelRecovery(ch)
+						if err != nil {
+							fndgLog.Error("Error waiting for channel "+
+								"recovery: %s", err.Error())
+							return
+						}
+
+					}
+
+				case <-f.quit:
+					// The fundingManager is shutting down, and will
+					// resume wait on startup.
+				case shortChanID, ok := <-confChan:
+					if !ok {
+						fndgLog.Errorf("Waiting for funding" +
+							"confirmation failed")
+						return
+					}
+
+					// The funding transaction has confirmed, so
+					// we'll attempt to retrieve the remote peer
+					// to complete the rest of the funding flow.
+					peerChan := make(chan lnpeer.Peer, 1)
+					f.cfg.NotifyWhenOnline(ch.IdentityPub, peerChan)
+
+					var peer lnpeer.Peer
+					select {
+					case peer = <-peerChan:
+					case <-f.quit:
+						return
+					}
+					err := f.handleFundingConfirmation(
+						peer, ch, shortChanID,
+					)
+					if err != nil {
+						fndgLog.Errorf("Failed to handle "+
+							"funding confirmation: %v", err)
+						return
+					}
+				}
+
 			}
 		}(channel)
 	}
@@ -1764,7 +1862,7 @@ func (f *fundingManager) waitForFundingWithTimeout(completeChan *channeldb.OpenC
 
 			// If we are not the channel initiator it's safe
 			// to timeout the channel
-			if uint32(epoch.Height) >= maxHeight && !completeChan.IsInitiator {
+			if uint32(epoch.Height) >= maxHeight {
 				fndgLog.Warnf("waited for %v blocks without "+
 					"seeing funding transaction confirmed,"+
 					" cancelling.", maxWaitNumBlocksFundingConf)
@@ -1777,10 +1875,6 @@ func (f *fundingManager) waitForFundingWithTimeout(completeChan *channeldb.OpenC
 				close(timeoutChan)
 				return
 			}
-
-			// TODO: If we are the channel initiator implement
-			// a method for recovering the funds from the funding
-			// transaction
 
 		case <-f.quit:
 			// The fundingManager is shutting down, will resume

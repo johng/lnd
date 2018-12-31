@@ -426,6 +426,75 @@ func (l *LightningWallet) InitChannelReservation(
 	return <-req.resp, <-req.err
 }
 
+func (l *LightningWallet) GetRecoveryTransaction(
+	completeChan *channeldb.OpenChannel) (*wire.OutPoint, *wire.MsgTx, error) {
+
+	fundingTxIn := completeChan.FundingTxn.TxIn
+
+	fee := completeChan.LocalCommitment.CommitFee
+
+	localBalance := completeChan.LocalCommitment.LocalBalance
+
+	refund := localBalance.ToSatoshis() - 2*fee
+
+	refundAddress, _ := l.NewAddress(WitnessPubKey, false)
+
+	nFundingIns := make([]*wire.TxIn, len(fundingTxIn))
+
+	for i, ins := range fundingTxIn {
+		nFundingIns[i] = ins
+	}
+
+	refundScript, _ := txscript.PayToAddrScript(refundAddress)
+
+	out := &wire.TxOut{
+		Value:    int64(refund),
+		PkScript: refundScript,
+	}
+
+	tx := wire.NewMsgTx(1)
+
+	for _, ins := range nFundingIns {
+		tx.AddTxIn(ins)
+	}
+
+	tx.AddTxOut(out)
+
+	signDesc := SignDescriptor{
+		HashType:  txscript.SigHashAll,
+		SigHashes: txscript.NewTxSigHashes(tx),
+	}
+
+	for i, txIn := range tx.TxIn {
+		info, err := l.FetchInputInfo(&txIn.PreviousOutPoint)
+		if err == ErrNotMine {
+			continue
+		} else if err != nil {
+			return nil, nil, err
+		}
+
+		signDesc.Output = info
+		signDesc.InputIndex = i
+
+		inputScript, err := l.Cfg.Signer.ComputeInputScript(tx,
+			&signDesc)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		txIn.SignatureScript = inputScript.ScriptSig
+		txIn.Witness = inputScript.Witness
+	}
+
+	completeChan.RecoveryTxn = tx
+	txHash := tx.TxHash()
+	outPoint := wire.NewOutPoint(&txHash, 0)
+	completeChan.RecoveryOutpoint = *outPoint
+
+	return outPoint, tx, nil
+
+}
+
 // handleFundingReserveRequest processes a message intending to create, and
 // validate a funding reservation request.
 func (l *LightningWallet) handleFundingReserveRequest(req *InitFundingReserveMsg) {
