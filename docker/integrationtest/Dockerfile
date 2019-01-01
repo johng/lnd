@@ -13,29 +13,22 @@ COPY . /lnd
 
 WORKDIR /lnd
 
+RUN ls
+
 # Force Go to use the cgo based DNS resolver. This is required to ensure DNS
 # queries required to connect to linked containers succeed.
 ENV GODEBUG netdns=cgo
 
-
-
-RUN make && make install
+RUN make \
+&&  make install
 
 FROM lightningnetwork/btcd-alpine as btcd
 
-
-
-FROM alpine as final
-RUN apk add --no-cache --update alpine-sdk \
-    git \
-    make \
-    bash
-
-
-COPY --from=builder /go/bin/lnd /bin/
-COPY --from=builder /go/bin/lncli /bin/
-COPY --from=btcd /bin/btcctl /bin/
-COPY --from=btcd /bin/btcd /bin/
+COPY --from=btcd /go/bin/addblock /bin/
+COPY --from=btcd /go/bin/btcctl /bin/
+COPY --from=btcd /go/bin/btcd /bin/
+COPY --from=btcd /go/bin/findcheckpoint /bin/
+COPY --from=btcd /go/bin/gencerts /bin/
 
 
 

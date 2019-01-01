@@ -1,0 +1,126 @@
+2019-01-01 15:22:08.070 [WRN] LTND: open /Users/johng/Library/Application Support/Lnd/lnd.conf: no such file or directory
+2019-01-01 15:22:08.070 [INF] LTND: Version: 0.5.1-beta commit=, build=production, logging=default
+2019-01-01 15:22:08.070 [INF] LTND: Active chain: Bitcoin (network=simnet)
+2019-01-01 15:22:08.071 [INF] CHDB: Checking for schema update: latest_version=7, db_version=7
+2019-01-01 15:22:08.135 [INF] LTND: Primary chain is set to: bitcoin
+2019-01-01 15:22:11.299 [INF] LNWL: Opened wallet
+2019-01-01 15:22:12.471 [INF] LNWL: The wallet has been unlocked without a time limit
+2019-01-01 15:22:27.515 [INF] LTND: LightningWallet opened
+2019-01-01 15:22:27.517 [INF] LNWL: Catching up block hashes to height 0, this will take a while...
+2019-01-01 15:22:27.517 [INF] HSWC: Restoring in-memory circuit state from disk
+2019-01-01 15:22:27.517 [INF] HSWC: Payment circuits loaded: num_pending=0, num_open=0
+2019-01-01 15:22:27.518 [INF] LNWL: Caught up to height 0
+2019-01-01 15:22:27.518 [INF] SWPR: Migrating UTXO nursery finalized TXIDs
+2019-01-01 15:22:27.518 [INF] LNWL: Done catching up block hashes
+2019-01-01 15:22:27.519 [INF] ATPL: Instantiating autopilot with cfg: (*main.autoPilotConfig)(0xc0000cced0)({
+ Active: (bool) false,
+ MaxChannels: (int) 5,
+ Allocation: (float64) 0.6,
+ MinChannelSize: (int64) 20000,
+ MaxChannelSize: (int64) 16777215,
+ Private: (bool) false,
+ MinConfs: (int32) 0
+})
+
+2019-01-01 15:22:27.519 [INF] RPCS: RPC server listening on 127.0.0.1:10001
+2019-01-01 15:22:27.519 [INF] RPCS: gRPC proxy started at 127.0.0.1:8001
+2019-01-01 15:22:27.521 [INF] LNWL: Started rescan from block 683e86bd5c6d110d91b94b97137ba6bfe02dbbdb8e3dff722a669b5d69d77af6 (height 0) for 0 addresses
+2019-01-01 15:22:27.522 [INF] LNWL: Catching up block hashes to height 0, this might take a while
+2019-01-01 15:22:27.522 [INF] LNWL: Done catching up block hashes
+2019-01-01 15:22:27.522 [INF] LNWL: Finished rescan for 0 addresses (synced to block 683e86bd5c6d110d91b94b97137ba6bfe02dbbdb8e3dff722a669b5d69d77af6, height 0)
+2019-01-01 15:22:27.556 [INF] HSWC: Starting HTLC Switch
+2019-01-01 15:22:27.556 [INF] NTFN: New block epoch subscription
+2019-01-01 15:22:27.556 [INF] NTFN: New block epoch subscription
+2019-01-01 15:22:27.557 [INF] NTFN: New block epoch subscription
+2019-01-01 15:22:27.558 [INF] NTFN: New block epoch subscription
+2019-01-01 15:22:27.558 [INF] DISC: Authenticated Gossiper is starting
+2019-01-01 15:22:27.558 [INF] BRAR: Starting contract observer, watching for breaches.
+2019-01-01 15:22:27.559 [INF] NTFN: New block epoch subscription
+2019-01-01 15:22:27.559 [INF] CRTR: FilteredChainView starting
+2019-01-01 15:22:27.591 [INF] CRTR: Filtering chain using 0 channels active
+2019-01-01 15:22:27.592 [INF] CRTR: Prune tip for Channel Graph: height=0, hash=683e86bd5c6d110d91b94b97137ba6bfe02dbbdb8e3dff722a669b5d69d77af6
+2019-01-01 15:22:27.592 [INF] CMGR: Server listening on 127.0.0.1:10011
+2019-01-01 15:22:27.592 [INF] SRVR: Auto peer bootstrapping is disabled
+2019-01-01 15:22:57.231 [INF] LTND: Received SIGINT (Ctrl+C).
+2019-01-01 15:22:57.231 [INF] LTND: Shutting down...
+2019-01-01 15:22:57.231 [INF] LTND: Gracefully shutting down.
+2019-01-01 15:22:57.231 [INF] HSWC: Block epoch canceled, decaying hash log shutting down
+2019-01-01 15:22:57.231 [INF] CRTR: Channel Router shutting down
+2019-01-01 15:22:57.231 [INF] CRTR: FilteredChainView stopping
+2019-01-01 15:22:57.231 [INF] HSWC: HTLC Switch shutting down
+2019-01-01 15:22:57.231 [INF] UTXN: UTXO nursery shutting down
+2019-01-01 15:22:57.231 [INF] BRAR: Breach arbiter shutting down
+2019-01-01 15:22:57.231 [INF] DISC: Authenticated Gossiper is stopping
+2019-01-01 15:22:57.231 [INF] CNCT: Stopping ChainArbitrator
+2019-01-01 15:22:57.231 [INF] FNDG: Funding manager shutting down
+2019-01-01 15:22:57.231 [INF] RPCS: Stopping RPC Server
+2019-01-01 15:22:57.232 [INF] LTND: Shutdown complete
+2019-01-01 15:24:01.571 [WRN] LTND: open /Users/johng/Library/Application Support/Lnd/lnd.conf: no such file or directory
+2019-01-01 15:24:01.571 [INF] LTND: Version: 0.5.1-beta commit=, build=production, logging=default
+2019-01-01 15:24:01.571 [INF] LTND: Active chain: Bitcoin (network=simnet)
+2019-01-01 15:24:01.573 [INF] CHDB: Checking for schema update: latest_version=7, db_version=7
+2019-01-01 15:24:01.633 [INF] LTND: Primary chain is set to: bitcoin
+2019-01-01 15:24:03.869 [INF] LNWL: Opened wallet
+2019-01-01 15:24:04.566 [INF] LNWL: The wallet has been unlocked without a time limit
+2019-01-01 15:24:04.596 [INF] LTND: LightningWallet opened
+2019-01-01 15:24:04.597 [INF] LNWL: Catching up block hashes to height 0, this will take a while...
+2019-01-01 15:24:04.598 [INF] HSWC: Restoring in-memory circuit state from disk
+2019-01-01 15:24:04.599 [INF] LNWL: Caught up to height 0
+2019-01-01 15:24:04.599 [INF] HSWC: Payment circuits loaded: num_pending=0, num_open=0
+2019-01-01 15:24:04.599 [INF] LNWL: Done catching up block hashes
+2019-01-01 15:24:04.600 [INF] SWPR: Migrating UTXO nursery finalized TXIDs
+2019-01-01 15:24:04.600 [INF] LNWL: Started rescan from block 683e86bd5c6d110d91b94b97137ba6bfe02dbbdb8e3dff722a669b5d69d77af6 (height 0) for 0 addresses
+2019-01-01 15:24:04.600 [INF] ATPL: Instantiating autopilot with cfg: (*main.autoPilotConfig)(0xc00003a8a0)({
+ Active: (bool) false,
+ MaxChannels: (int) 5,
+ Allocation: (float64) 0.6,
+ MinChannelSize: (int64) 20000,
+ MaxChannelSize: (int64) 16777215,
+ Private: (bool) false,
+ MinConfs: (int32) 0
+})
+
+2019-01-01 15:24:04.600 [INF] LNWL: Catching up block hashes to height 0, this might take a while
+2019-01-01 15:24:04.600 [INF] LNWL: Done catching up block hashes
+2019-01-01 15:24:04.600 [INF] LNWL: Finished rescan for 0 addresses (synced to block 683e86bd5c6d110d91b94b97137ba6bfe02dbbdb8e3dff722a669b5d69d77af6, height 0)
+2019-01-01 15:24:04.600 [INF] RPCS: RPC server listening on 127.0.0.1:10001
+2019-01-01 15:24:04.602 [INF] RPCS: gRPC proxy started at 127.0.0.1:8001
+2019-01-01 15:24:04.632 [INF] HSWC: Starting HTLC Switch
+2019-01-01 15:24:04.632 [INF] NTFN: New block epoch subscription
+2019-01-01 15:24:04.632 [INF] NTFN: New block epoch subscription
+2019-01-01 15:24:04.632 [INF] NTFN: New block epoch subscription
+2019-01-01 15:24:04.633 [INF] NTFN: New block epoch subscription
+2019-01-01 15:24:04.633 [INF] DISC: Authenticated Gossiper is starting
+2019-01-01 15:24:04.633 [INF] BRAR: Starting contract observer, watching for breaches.
+2019-01-01 15:24:04.633 [INF] NTFN: New block epoch subscription
+2019-01-01 15:24:04.634 [INF] CRTR: FilteredChainView starting
+2019-01-01 15:24:04.663 [INF] CRTR: Filtering chain using 0 channels active
+2019-01-01 15:24:04.664 [INF] CRTR: Prune tip for Channel Graph: height=0, hash=683e86bd5c6d110d91b94b97137ba6bfe02dbbdb8e3dff722a669b5d69d77af6
+2019-01-01 15:24:04.664 [INF] CMGR: Server listening on 127.0.0.1:10011
+2019-01-01 15:24:04.664 [INF] SRVR: Auto peer bootstrapping is disabled
+2019-01-01 16:24:04.671 [INF] CRTR: Examining Channel Graph for zombie channels
+2019-01-01 16:24:04.671 [INF] CRTR: Pruning 0 Zombie Channels
+2019-01-01 17:24:04.670 [INF] CRTR: Examining Channel Graph for zombie channels
+2019-01-01 17:24:04.670 [INF] CRTR: Pruning 0 Zombie Channels
+2019-01-01 18:24:04.669 [INF] CRTR: Examining Channel Graph for zombie channels
+2019-01-01 18:24:04.669 [INF] CRTR: Pruning 0 Zombie Channels
+2019-01-01 19:24:04.667 [INF] CRTR: Examining Channel Graph for zombie channels
+2019-01-01 19:24:04.667 [INF] CRTR: Pruning 0 Zombie Channels
+2019-01-01 20:24:04.660 [INF] CRTR: Examining Channel Graph for zombie channels
+2019-01-01 20:24:04.660 [INF] CRTR: Pruning 0 Zombie Channels
+2019-01-01 21:24:04.659 [INF] CRTR: Examining Channel Graph for zombie channels
+2019-01-01 21:24:04.659 [INF] CRTR: Pruning 0 Zombie Channels
+2019-01-01 21:38:39.713 [INF] LTND: Received SIGINT (Ctrl+C).
+2019-01-01 21:38:39.714 [INF] LTND: Shutting down...
+2019-01-01 21:38:39.714 [INF] LTND: Gracefully shutting down.
+2019-01-01 21:38:39.714 [INF] CRTR: Channel Router shutting down
+2019-01-01 21:38:39.714 [INF] HSWC: Block epoch canceled, decaying hash log shutting down
+2019-01-01 21:38:39.714 [INF] CRTR: FilteredChainView stopping
+2019-01-01 21:38:39.714 [INF] HSWC: HTLC Switch shutting down
+2019-01-01 21:38:39.715 [INF] UTXN: UTXO nursery shutting down
+2019-01-01 21:38:39.715 [INF] BRAR: Breach arbiter shutting down
+2019-01-01 21:38:39.715 [INF] DISC: Authenticated Gossiper is stopping
+2019-01-01 21:38:39.715 [INF] CNCT: Stopping ChainArbitrator
+2019-01-01 21:38:39.715 [INF] FNDG: Funding manager shutting down
+2019-01-01 21:38:39.715 [INF] RPCS: Stopping RPC Server
+2019-01-01 21:38:39.716 [INF] LTND: Shutdown complete
