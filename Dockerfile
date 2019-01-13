@@ -17,13 +17,9 @@ WORKDIR /lnd
 # queries required to connect to linked containers succeed.
 ENV GODEBUG netdns=cgo
 
-
-
 RUN make && make install
 
 FROM lightningnetwork/btcd-alpine as btcd
-
-
 
 FROM alpine as final
 RUN apk add --no-cache --update alpine-sdk \
@@ -36,8 +32,6 @@ COPY --from=builder /go/bin/lnd /bin/
 COPY --from=builder /go/bin/lncli /bin/
 COPY --from=btcd /bin/btcctl /bin/
 COPY --from=btcd /bin/btcd /bin/
-
-
 
 
 

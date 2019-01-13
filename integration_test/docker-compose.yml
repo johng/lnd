@@ -1,0 +1,15 @@
+version: '2'
+services:
+
+  lnd:
+    image: lnd
+    build:
+      context: ../
+
+  datadump:
+    depends_on:
+      - lnd
+    build:
+      context: ./dump
+    volumes:
+      - ./data:/data

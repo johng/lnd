@@ -65,3 +65,5 @@ test.sh
 .dockerignore
 
 Dockerfile
+integration_test
+docker
