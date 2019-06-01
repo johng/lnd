@@ -838,6 +838,67 @@ func assertCorrectNumberPendingChannels(t *harnessTest, ctx context.Context,
 	}
 }
 
+// testChannelRecovery checks that if a channel funding workflow times out
+// the correct recovery process will be executed for the channel initiator.
+func testChannelRecovery(net *lntest.NetworkHarness, t *harnessTest) {
+	ctxb := context.Background()
+
+	chanAmt := lnd.MaxBtcFundingAmount
+	pushAmt := btcutil.Amount(100000)
+	openChannelParameters := lntest.OpenChannelParams{
+		Amt:     chanAmt,
+		PushAmt: pushAmt,
+	}
+
+	srcNode, destNode := net.Alice, net.Bob
+
+	chanOpenUpdate, err := net.OpenChannel(
+		ctxb, srcNode, destNode, openChannelParameters,
+	)
+	if err != nil {
+		t.Fatalf("unable to open channel: %v", err)
+	}
+
+	srcNodePending, destNodePending := 1, 1
+	assertCorrectNumberPendingChannels(t, ctxb, srcNode, destNode,
+		srcNodePending, destNodePending, PendingOpen,
+	)
+
+	numberOfBlocks := lnd.MaxWaitNumBlocksFundingConf + 50
+	mineEmptyBlocks(t, net, numberOfBlocks)
+
+	expectedNumberTransactions := 2
+	minedBlocks := mineBlocks(t, net, 100, expectedNumberTransactions)
+
+	ctxt, _ := context.WithTimeout(ctxb, channelOpenTimeout)
+	fundingChanPoint, err := net.WaitForChannelOpen(ctxt, chanOpenUpdate)
+
+	srcNodePending, destNodePending = 0, 0
+	assertCorrectNumberPendingChannels(t, ctxb, srcNode, destNode,
+		srcNodePending, destNodePending, PendingOpen,
+	)
+
+	fundingTxID, err := lnd.GetChanPointFundingTxid(fundingChanPoint)
+	if err != nil || fundingTxID == nil {
+		t.Fatalf("unable to get channel funding tx")
+	}
+
+	assertTxInBlock(t, minedBlocks[0], fundingTxID)
+
+	chanPoint := wire.OutPoint{
+		Hash:  *fundingTxID,
+		Index: fundingChanPoint.OutputIndex,
+	}
+
+	ctxt, _ = context.WithTimeout(ctxb, channelOpenTimeout)
+	isNotActive := false
+	err = net.AssertChannelExists(ctxt, srcNode, &chanPoint, isNotActive)
+	if err != nil {
+		t.Fatalf("unable to assert channel existence: %v", err)
+	}
+
+}
+
 // testOnchainFundRecovery checks lnd's ability to rescan for onchain outputs
 // when providing a valid aezeed that owns outputs on the chain. This test
 // performs multiple restorations using the same seed and various recovery
@@ -14659,6 +14720,14 @@ var testsCases = []*testCase{
 	{
 		name: "cpfp",
 		test: testCPFP,
+	},
+	{
+		name: "automatic certificate regeneration",
+		test: testTLSAutoRegeneration,
+	},
+	{
+		name: "channel timeout recovery",
+		test: testChannelRecovery,
 	},
 }
 
