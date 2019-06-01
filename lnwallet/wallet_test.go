@@ -1,11 +1,32 @@
 package lnwallet
-
 import (
 	"testing"
-
 	"github.com/btcsuite/btcutil"
 	"github.com/lightningnetwork/lnd/input"
 )
+
+// TestCorrectRecoveryFeeCalculated tests that the correct recoveryTxFee is
+// calculated
+func TestCorrectRecoveryFeeCalculated(t *testing.T) {
+	maxRecoveryTxFeeIncreases := [6]float64{0.0, 1.5, 1.2423, 2.0, 3.0, 10.0}
+	fundingTxFee := int64(10)
+	changeOutputValue := int64(30)
+	expectedRecoveryTxFees := [6]int64{0, 15, 12, 20, 30, 30}
+
+	for index, maxRecoveryTxFeeIncrease := range maxRecoveryTxFeeIncreases {
+		recoverTxFee := calculateRecoveryFees(changeOutputValue, fundingTxFee,
+			maxRecoveryTxFeeIncrease,
+		)
+		expectedRecoveryTxFee := expectedRecoveryTxFees[index]
+
+		if expectedRecoveryTxFee != recoverTxFee {
+			t.Fatalf("expected recoveryTxFee: %v, actual %v",
+				expectedRecoveryTxFees, recoverTxFee)
+		}
+
+	}
+}
+
 
 // fundingFee is a helper method that returns the fee estimate used for a tx
 // with the given number of inputs and the optional change output. This matches

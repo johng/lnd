@@ -435,6 +435,136 @@ func (l *LightningWallet) InitChannelReservation(
 	return <-req.resp, <-req.err
 }
 
+// CalculateTxFee calculates the fees for a given tx
+func (l *LightningWallet) CalculateTxFee(fundingTx *wire.MsgTx) (int64, error) {
+	txInputs := fundingTx.TxIn
+	txOutputs := fundingTx.TxOut
+
+	totalInputValue := int64(0)
+
+	for _, txIn := range txInputs {
+		txOut, err := l.Cfg.WalletController.FetchInputInfo(&txIn.PreviousOutPoint)
+
+		if err != nil {
+			return 0, err
+		}
+		totalInputValue += txOut.Value
+	}
+	totalOutputValue := int64(0)
+	for _, txOut := range txOutputs {
+		totalOutputValue += txOut.Value
+	}
+
+	fees := totalInputValue - totalOutputValue
+	return fees, nil
+}
+
+// calculateRecoveryFees calculates the new fees to be used in the recovery tx.
+func calculateRecoveryFees(changeOutputValue, fundingTxFees int64,
+	scale float64) int64 {
+
+	scaledFees := int64(math.Round(float64(fundingTxFees) * scale))
+
+	if scaledFees < changeOutputValue {
+		return scaledFees
+	}
+	return changeOutputValue
+}
+
+// buildRecoveryTx generates the recoveryTx used to help confirm the funding
+// tx.
+func (l *LightningWallet) buildRecoveryTx(txInputs []*wire.TxIn,
+	outputAmount int64) (*wire.MsgTx, error) {
+
+	refundAddress, _ := l.NewAddress(NestedWitnessPubKey, false)
+	refundScript, _ := txscript.PayToAddrScript(refundAddress)
+
+	tx := wire.NewMsgTx(2)
+
+	out := &wire.TxOut{
+		Value:    outputAmount,
+		PkScript: refundScript,
+	}
+
+	tx.AddTxOut(out)
+
+	for _, txInput := range txInputs {
+		tx.AddTxIn(txInput)
+	}
+
+	for inputIndex, txInput := range tx.TxIn {
+		signDesc := input.SignDescriptor{
+			HashType:  txscript.SigHashAll,
+			SigHashes: txscript.NewTxSigHashes(tx),
+		}
+
+		info, err := l.FetchInputInfo(&txInput.PreviousOutPoint)
+		if err != nil {
+			return nil, err
+		}
+
+		signDesc.Output = info
+		signDesc.InputIndex = inputIndex
+
+		inputScript, err := l.Cfg.Signer.ComputeInputScript(
+			tx, &signDesc,
+		)
+
+		if err != nil {
+			return nil, err
+		}
+		txInput.SignatureScript = inputScript.SigScript
+		txInput.Witness = inputScript.Witness
+	}
+
+	return tx, nil
+}
+
+// GetRecoveryTransaction performs the necessary steps for generating the
+// recovery tx. It takes our change output for use as an input to the recovery
+// tx. Calculates the new fee level which is likely to be confirmed and then
+// calls the helper function to generate the signed recovery tx.
+func (l *LightningWallet) GetRecoveryTransaction(
+	completeChan *channeldb.OpenChannel) (*wire.MsgTx, error) {
+
+	changeIndex := 1
+	minimumRequiredOutputs := 2
+	if len(completeChan.FundingTxn.TxOut) < minimumRequiredOutputs {
+		return nil, fmt.Errorf("fundingTx has less than %v outputs",
+			minimumRequiredOutputs)
+	}
+
+	changeOutput := completeChan.FundingTxn.TxOut[changeIndex]
+	fundingTxHash := completeChan.FundingTxn.TxHash()
+	outPoint := wire.NewOutPoint(&fundingTxHash, uint32(changeIndex))
+
+	fundingTxFees, err := l.CalculateTxFee(completeChan.FundingTxn)
+	if err != nil {
+		return nil, fmt.Errorf("error calculating tx fees: %v", err)
+	}
+
+	feeScaling := 3.0
+
+	walletLog.Debugf("Calculating recovery tx fee level, funding tx fee: %v",
+		fundingTxFees)
+
+	recoveryTxFees := calculateRecoveryFees(changeOutput.Value, fundingTxFees,
+		feeScaling,
+	)
+
+	recoveryTxOutAmount := changeOutput.Value - recoveryTxFees
+
+	walletLog.Debugf("Set recovery tx fee to: %v", recoveryTxFees)
+
+	txInputs := []*wire.TxIn{wire.NewTxIn(outPoint, nil, nil)}
+	recoveryTx, err := l.buildRecoveryTx(txInputs, recoveryTxOutAmount)
+	if err != nil {
+		return nil, err
+	}
+
+	return recoveryTx, nil
+}
+
 // handleFundingReserveRequest processes a message intending to create, and
 // validate a funding reservation request.
 func (l *LightningWallet) handleFundingReserveRequest(req *InitFundingReserveMsg) {
