@@ -459,8 +459,8 @@ func (l *LightningWallet) CalculateTxFee(fundingTx *wire.MsgTx) (int64, error) {
 	return fees, nil
 }
 
-// calculateRecoveryFees calculates the new fees to be used in the recovery tx.
-func calculateRecoveryFees(changeOutputValue, fundingTxFees int64,
+// CalculateRecoveryFees calculates the new fees to be used in the recovery tx.
+func CalculateRecoveryFees(changeOutputValue, fundingTxFees int64,
 	scale float64) int64 {
 
 	scaledFees := int64(math.Round(float64(fundingTxFees) * scale))
@@ -543,13 +543,11 @@ func (l *LightningWallet) GetRecoveryTransaction(
 		return nil, fmt.Errorf("error calculating tx fees: %v", err)
 	}
 
-	feeScaling := 3.0
-
 	walletLog.Debugf("Calculating recovery tx fee level, funding tx fee: %v",
 		fundingTxFees)
 
-	recoveryTxFees := calculateRecoveryFees(changeOutput.Value, fundingTxFees,
-		feeScaling,
+	recoveryTxFees := CalculateRecoveryFees(changeOutput.Value, fundingTxFees,
+		l.Cfg.MaxRecoveryTxFeeIncrease,
 	)
 
 	recoveryTxOutAmount := changeOutput.Value - recoveryTxFees

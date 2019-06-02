@@ -350,6 +350,10 @@ type fundingConfig struct {
 	// and on the requesting node's public key that returns a bool which tells
 	// the funding manager whether or not to accept the channel.
 	OpenChannelPredicate chanacceptor.ChannelAcceptor
+
+	// RecoverFundingTx is used to give permission to the funding manager
+	// to attempt to recover a stuck fundingTx.
+	RecoverFundingTx bool
 }
 
 // fundingManager acts as an orchestrator/bridge between the wallet's
