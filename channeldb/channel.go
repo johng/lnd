@@ -716,6 +716,7 @@ func (c *OpenChannel) fullSync(tx *bbolt.Tx) error {
 	return putOpenChannel(chanBucket, c)
 }
 
+// SetRecoveryTx saves the recovery fields of the channel to the bucket
 func (c *OpenChannel) SetRecoveryTx(recoveryTxn *wire.MsgTx) error {
 
 	c.Lock()
