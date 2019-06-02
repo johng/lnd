@@ -577,7 +577,7 @@ func deleteChannelFromDatabase(channel *channeldb.OpenChannel) {
 }
 
 // HandleChannelConfirmed finishes the remaining of the channel creation
-// workflow after the fundingTx is confirned.
+// workflow after the fundingTx is confirmed.
 func (f *fundingManager) HandleChannelConfirmed(ch *channeldb.OpenChannel,
 	shortChanID *lnwire.ShortChannelID) {
 
@@ -600,9 +600,7 @@ func (f *fundingManager) HandleChannelConfirmed(ch *channeldb.OpenChannel,
 	case <-f.quit:
 		return
 	}
-	err := f.handleFundingConfirmation(
-		peer, ch, shortChanID,
-	)
+	err := f.handleFundingConfirmation(peer, ch, shortChanID)
 	if err != nil {
 		fndgLog.Errorf("Failed to handle "+
 			"funding confirmation: %v", err)
@@ -1980,7 +1978,7 @@ func (f *fundingManager) waitForTxConfirmed(txid chainhash.Hash,
 	var confDetails *chainntnfs.TxConfirmation
 
 	confNtfn, err := f.cfg.Notifier.RegisterConfirmationsNtfn(
-		&txid, fundingScript, numConfs, 0,
+		&txid, fundingScript, numConfs, broadcastHeight,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("unable to register for the confirmation of tx:"+
