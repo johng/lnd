@@ -499,6 +499,42 @@ func deleteChannelFromDatabase(channel *channeldb.OpenChannel) {
 
 }
 
+// HandleChannelConfirmed finishes the remaining of the channel creation
+// workflow after the fundingTx is confirned.
+func (f *fundingManager) HandleChannelConfirmed(ch *channeldb.OpenChannel,
+	shortChanID *lnwire.ShortChannelID) {
+
+	peerChan := make(chan lnpeer.Peer, 1)
+
+	var peerKey [33]byte
+	copy(peerKey[:], ch.IdentityPub.SerializeCompressed())
+
+	f.cfg.NotifyWhenOnline(peerKey, peerChan)
+
+
+	// The funding transaction has confirmed, so
+	// we'll attempt to retrieve the remote peer
+	// to complete the rest of the funding flow.
+	f.cfg.NotifyWhenOnline(peerKey, peerChan)
+
+	var peer lnpeer.Peer
+	select {
+	case peer = <-peerChan:
+	case <-f.quit:
+		return
+	}
+	err := f.handleFundingConfirmation(
+		peer, ch, shortChanID,
+	)
+	if err != nil {
+		fndgLog.Errorf("Failed to handle "+
+			"funding confirmation: %v", err)
+		return
+	}
+}
+
+
+
 // Start launches all helper goroutines required for handling requests sent
 // to the funding manager.
 func (f *fundingManager) Start() error {
