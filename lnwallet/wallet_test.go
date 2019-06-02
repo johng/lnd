@@ -14,7 +14,7 @@ func TestCorrectRecoveryFeeCalculated(t *testing.T) {
 	expectedRecoveryTxFees := [6]int64{0, 15, 12, 20, 30, 30}
 
 	for index, maxRecoveryTxFeeIncrease := range maxRecoveryTxFeeIncreases {
-		recoverTxFee := calculateRecoveryFees(changeOutputValue, fundingTxFee,
+		recoverTxFee := CalculateRecoveryFees(changeOutputValue, fundingTxFee,
 			maxRecoveryTxFeeIncrease,
 		)
 		expectedRecoveryTxFee := expectedRecoveryTxFees[index]
