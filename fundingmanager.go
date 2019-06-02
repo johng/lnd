@@ -1909,7 +1909,7 @@ func (f *fundingManager) waitForFundingWithTimeout(
 
 	confChan := make(chan *lnwire.ShortChannelID)
 	timeoutChan := make(chan error, 1)
-	cancelChan := make(chan struct{})
+	timeoutChan := make(chan struct{})
 
 	f.wg.Add(1)
 	go f.waitForFundingConfirmation(ch, cancelChan, confChan)
