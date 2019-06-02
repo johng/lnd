@@ -458,6 +458,79 @@ var (
 	ErrChannelNotFound = fmt.Errorf("channel not found")
 )
 
+// recoverFundingTx is the main orchestrator for handling the funding
+// transaction recovery. Once the recovery is complete it will initiate
+// the remainder of the channel creation workflow.
+func (f *fundingManager) recoverFundingTx(ch *channeldb.OpenChannel,
+	confChan <-chan *lnwire.ShortChannelID) (*lnwire.ShortChannelID, error) {
+
+	if ch.RecoveryTxn == nil {
+		err := f.createRecoveryTx(ch)
+		if err != nil {
+			return nil, err
+		}
+	}
+	// signature script is not push only
+	err := f.cfg.PublishTransaction(ch.RecoveryTxn)
+	if err != nil && err != lnwallet.ErrDoubleSpend {
+		fndgLog.Errorf("Error publishing transaction %s ",
+			err.Error())
+		return nil, err
+	}
+
+	err = f.waitForChannelRecovery(ch)
+	if err != nil {
+		fndgLog.Error("Error waiting for channel "+
+			"recovery: %s", err.Error())
+		return nil, err
+	}
+	shortChanID, _ := <-confChan
+	return shortChanID, nil
+}
+
+// createRecoveryTx will initiate the wallet to create a new recovery tx for a
+// given channel. It will save the update into the channel database.
+func (f *fundingManager) createRecoveryTx(channel *channeldb.OpenChannel) error {
+	txOut, err := f.cfg.Wallet.GetRecoveryTransaction(channel)
+	if err != nil {
+
+		fndgLog.Errorf(
+			"Failed to generate recovery"+
+				" transaction: %s", err.Error())
+		return err
+	}
+
+	err = channel.SetRecoveryTx(txOut)
+	if err != nil {
+		fndgLog.Errorf("Failed to updated channel recovery info %s ",
+			err.Error())
+		return err
+	}
+	return err
+}
+
+// waitForChannelRecovery will block until the recovery tx is confirmed on the
+// blockchain.
+func (f *fundingManager) waitForChannelRecovery(channel *channeldb.OpenChannel) error {
+	txHash := channel.RecoveryTxn.TxHash()
+	numConfs := uint32(channel.NumConfsRequired)
+	fundingBroadcastHeight := channel.FundingBroadcastHeight
+	script := channel.RecoveryTxn.TxOut[0].PkScript
+
+	_, err := f.waitForTxConfirmed(
+		txHash,
+		script,
+		fundingBroadcastHeight,
+		numConfs)
+
+	if err != nil {
+		return fmt.Errorf("error waiting for recovery transaction (%v)",
+			txHash)
+	}
+
+	return nil
+}
+
 // newFundingManager creates and initializes a new instance of the
 // fundingManager.
 func newFundingManager(cfg fundingConfig) (*fundingManager, error) {
@@ -532,8 +605,6 @@ func (f *fundingManager) HandleChannelConfirmed(ch *channeldb.OpenChannel,
 		return
 	}
 }
-
-
 
 // Start launches all helper goroutines required for handling requests sent
 // to the funding manager.
@@ -1859,6 +1930,12 @@ func (f *fundingManager) waitForFundingWithTimeout(
 		if err != nil {
 			return nil, err
 		}
+		shortChanID, err := f.recoverFundingTx(ch, confChan)
+		close(cancelChan)
+		if err != nil {
+			return nil, err
+		}
+		f.HandleChannelConfirmed(ch, shortChanID)
 		return nil, ErrConfirmationTimeout
 
 	case <-f.quit:
