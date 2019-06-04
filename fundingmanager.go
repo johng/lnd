@@ -600,7 +600,7 @@ func (f *fundingManager) HandleChannelConfirmed(ch *channeldb.OpenChannel,
 	case <-f.quit:
 		return
 	}
-	err := f.handleFundingConfirmation(peer, ch, shortChanID)
+	err := f.handleFundingConfirmation(peer, ch, shortChanID, nil)
 	if err != nil {
 		fndgLog.Errorf("Failed to handle "+
 			"funding confirmation: %v", err)
