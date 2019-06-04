@@ -859,6 +859,14 @@ func testChannelRecovery(net *lntest.NetworkHarness, t *harnessTest) {
 	mineEmptyBlocks(t, net, numberOfBlocks)
 
 	expectedNumberTransactions := 2
+
+	_, err = waitForNTxsInMempool(
+		net.Miner.Node, expectedNumberTransactions, time.Second*120,
+	)
+	if err != nil {
+		t.Fatalf("unable to find all txns in mempool: %v", err)
+	}
+
 	minedBlocks := mineBlocks(t, net, 100, expectedNumberTransactions)
 
 	ctxt, _ := context.WithTimeout(ctxb, channelOpenTimeout)
