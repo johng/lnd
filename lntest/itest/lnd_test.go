@@ -861,7 +861,7 @@ func testChannelRecovery(net *lntest.NetworkHarness, t *harnessTest) {
 	expectedNumberTransactions := 2
 
 	_, err = waitForNTxsInMempool(
-		net.Miner.Node, expectedNumberTransactions, time.Second*120,
+		net.Miner.Node, expectedNumberTransactions, time.Second*240,
 	)
 	if err != nil {
 		t.Fatalf("unable to find all txns in mempool: %v", err)
