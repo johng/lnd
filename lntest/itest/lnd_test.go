@@ -812,7 +812,7 @@ func assertCorrectNumberPendingChannels(t *harnessTest, ctx context.Context,
 	)
 
 	if err != nil {
-		t.Fatalf("error from checkCorrectPendingChannelResponse: %v", err)
+		t.Fatalf("error from checkCorrectPendingChannelResponse for alice: %v", err)
 	}
 
 	pendingChanResp, err = bobNode.PendingChannels(ctxt, pendingChannelRequest)
@@ -872,10 +872,40 @@ func testChannelRecovery(net *lntest.NetworkHarness, t *harnessTest) {
 	ctxt, _ := context.WithTimeout(ctxb, channelOpenTimeout)
 	fundingChanPoint, err := net.WaitForChannelOpen(ctxt, chanOpenUpdate)
 
-	srcNodePending, destNodePending = 0, 0
-	assertCorrectNumberPendingChannels(t, ctxb, srcNode, destNode,
-		srcNodePending, destNodePending, PendingOpen,
-	)
+	err = lntest.WaitPredicate(func() bool {
+
+		srcNodePending, destNodePending = 0, 0
+
+		pendingChannelRequest := &lnrpc.PendingChannelsRequest{}
+
+		pendingChanResp, err := srcNode.PendingChannels(ctxt,
+			pendingChannelRequest,
+		)
+
+		pendingState := PendingOpen
+
+		if err != nil {
+			return false
+		}
+
+		err = checkCorrectPendingChannelResponse(pendingChanResp, srcNodePending,
+			pendingState,
+		)
+
+		pendingChanResp, err = destNode.PendingChannels(ctxt,
+			pendingChannelRequest,
+		)
+
+		err = checkCorrectPendingChannelResponse(pendingChanResp, destNodePending,
+			pendingState,
+		)
+
+		if err != nil {
+			return false
+		}
+
+		return true
+	}, time.Second*60)
 
 	fundingTxID, err := lnd.GetChanPointFundingTxid(fundingChanPoint)
 	if err != nil || fundingTxID == nil {
