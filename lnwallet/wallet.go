@@ -529,7 +529,8 @@ func (l *LightningWallet) GetRecoveryTransaction(
 
 	changeIndex := 1
 	minimumRequiredOutputs := 2
-	if len(completeChan.FundingTxn.TxOut) < minimumRequiredOutputs {
+	if completeChan.ChanType == channeldb.SingleFunder &&
+		len(completeChan.FundingTxn.TxOut) < minimumRequiredOutputs {
 		return nil, fmt.Errorf("fundingTx has less than %v outputs",
 			minimumRequiredOutputs)
 	}
