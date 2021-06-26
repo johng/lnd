@@ -872,7 +872,7 @@ func (f *Manager) advanceFundingState(channel *channeldb.OpenChannel,
 	// If the channel is still pending we must wait for the funding
 	// transaction to confirm.
 	if channel.IsPending {
-		err := f.advancePendingChannelState(channel, pendingChanID, updateChan)
+		err := f.advancePendingChannelState(channel, pendingChanID)
 		if err != nil {
 			log.Errorf("Unable to advance pending state of "+
 				"ChannelPoint(%v): %v",
@@ -1130,7 +1130,7 @@ func (f *Manager) waitForFundingSpend(fundingTx *wire.MsgTx,
 // advancePendingChannelState waits for a pending channel's funding tx to
 // confirm, and marks it open in the database when that happens.
 func (f *Manager) advancePendingChannelState(
-	channel *channeldb.OpenChannel, pendingChanID [32]byte, updateChan chan<- *lnrpc.OpenStatusUpdate) error {
+	channel *channeldb.OpenChannel, pendingChanID [32]byte) error {
 
 	confChannel, err := f.waitForFundingWithTimeout(channel)
 	if err == ErrConfirmationTimeout || err == ErrDoubleSpend {
@@ -1150,10 +1150,6 @@ func (f *Manager) advancePendingChannelState(
 			RemoteCurrentRevocation: ch.RemoteCurrentRevocation,
 			RemoteNextRevocation:    ch.RemoteNextRevocation,
 			LocalChanConfig:         ch.LocalChanCfg,
-		}
-
-		updateChan <- &lnrpc.OpenStatusUpdate{
-			Update: &lnrpc.OpenStatusUpdate_Canceled{},
 		}
 
 		// Close the channel with us as the initiator because we are
