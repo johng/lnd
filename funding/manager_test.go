@@ -3777,22 +3777,9 @@ func TestFundingManagerFundingDoubleSpend(t *testing.T) {
 			// mined, we should receive an update saying the funding flow
 			// was canceled at this point.
 			if !test.fundingTxMined {
-				// The funding transaction was mined, so assert that both funding
-				// managers now have the state of this channel 'markedOpen' in their
-				// internal state machine.
-				var recvUpdate *lnrpc.OpenStatusUpdate
-				select {
-				case recvUpdate = <-updateChan:
-				case <-time.After(time.Second * 5):
-					t.Fatalf("alice did not send OpenStatusUpdate")
-				}
-
-				_, ok := recvUpdate.Update.(*lnrpc.OpenStatusUpdate_Canceled)
-				if !ok {
-					t.Fatal("OpenStatusUpdate was not OpenStatusUpdate_Canceled")
-				}
+				// Alice should have sent an Error message to Bob.
+				assertErrorSent(t, alice.msgChan)
 			} else {
-
 				// If not the funding flow should continue as normal.
 				alice.mockNotifier.oneConfChannel <- &chainntnfs.TxConfirmation{
 					Tx: fundingTx,
@@ -3800,7 +3787,6 @@ func TestFundingManagerFundingDoubleSpend(t *testing.T) {
 				bob.mockNotifier.oneConfChannel <- &chainntnfs.TxConfirmation{
 					Tx: fundingTx,
 				}
-
 				assertMarkedOpen(t, alice, bob, fundingOutPoint)
 			}
 		})
