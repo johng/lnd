@@ -545,9 +545,11 @@ func recreateAliceFundingManager(t *testing.T, alice *testNode) {
 		UpdateLabel: func(chainhash.Hash, string) error {
 			return nil
 		},
-		ZombieSweeperInterval: oldCfg.ZombieSweeperInterval,
-		ReservationTimeout:    oldCfg.ReservationTimeout,
-		OpenChannelPredicate:  chainedAcceptor,
+		ZombieSweeperInterval:  oldCfg.ZombieSweeperInterval,
+		ReservationTimeout:     oldCfg.ReservationTimeout,
+		OpenChannelPredicate:   chainedAcceptor,
+		NotifyOpenChannelEvent: oldCfg.NotifyOpenChannelEvent,
+		ReportShortChanID:      oldCfg.ReportShortChanID,
 	})
 	if err != nil {
 		t.Fatalf("failed recreating aliceFundingManager: %v", err)
@@ -3792,4 +3794,45 @@ func TestFundingManagerFundingDoubleSpend(t *testing.T) {
 		})
 
 	}
+}
+
+// TestFundingManagerFundingDoubleSpend tests that we correctly handles the
+// case where we fail to broadcast the funding transaction, and/or another
+// conflicting transaction gets mined.
+func TestFundingManagerFundingDoubleSpendRestartBehaviour(t *testing.T) {
+	t.Parallel()
+
+	alice, bob := setupFundingManagers(t)
+	defer tearDownFundingManagers(t, alice, bob)
+
+	// We will consume the channel updates as we go, so no
+	// buffering is needed.
+	updateChan := make(chan *lnrpc.OpenStatusUpdate)
+
+	// Run through the process of opening the channel, up until the
+	// funding transaction is broadcasted.
+	openChannel(t, alice, bob, 500000, 0, 1,
+		updateChan, true)
+
+	recreateAliceFundingManager(t, alice)
+
+	spenderHash, err := chainhash.NewHashFromStr("abc")
+	if err != nil {
+		t.Fatalf("unable to create hash: %v", err)
+	}
+
+	alice.mockNotifier.spendChannel <- &chainntnfs.SpendDetail{
+		SpenderTxHash: spenderHash,
+	}
+
+	spenderHash, err = chainhash.NewHashFromStr("abc")
+	if err != nil {
+		t.Fatalf("unable to create hash: %v", err)
+	}
+
+	alice.mockNotifier.spendChannel <- &chainntnfs.SpendDetail{
+		SpenderTxHash: spenderHash,
+	}
+
+	assertErrorSent(t, alice.msgChan)
 }
