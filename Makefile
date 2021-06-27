@@ -208,7 +208,7 @@ unit-race:
 	env CGO_ENABLED=1 GORACE="history_size=7 halt_on_errors=1" $(UNIT_RACE)
 
 goveralls: $(GOVERALLS_BIN)
-	@$(call print, "Sending coverage report.")
+	@$(call print, "Sending coverage report.")lnd-itest
 	$(GOVERALLS_BIN) -coverprofile=coverage.txt -service=travis-ci
 
 

@@ -1063,9 +1063,6 @@ func (f *Manager) stateStep(channel *channeldb.OpenChannel,
 func (f *Manager) waitForFundingSpend(fundingTx *wire.MsgTx,
 	fndBroadcastHeight uint32) (*chainhash.Hash, error) {
 
-	// TODO: best way to fetch the script?
-	pkScript := []byte("todo")
-
 	quit := make(chan struct{})
 	defer close(quit)
 
@@ -1078,8 +1075,12 @@ func (f *Manager) waitForFundingSpend(fundingTx *wire.MsgTx,
 		go func() {
 			defer f.wg.Done()
 
+			pkScript, err := txscript.ComputePkScript(
+				txIn.SignatureScript, txIn.Witness,
+			)
+
 			spendNtfn, err := f.cfg.Notifier.RegisterSpendNtfn(
-				&txIn.PreviousOutPoint, pkScript,
+				&txIn.PreviousOutPoint, pkScript.Script(),
 				fndBroadcastHeight,
 			)
 			if err != nil {
