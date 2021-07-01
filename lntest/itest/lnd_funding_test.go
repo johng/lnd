@@ -3,7 +3,10 @@ package itest
 import (
 	"context"
 	"fmt"
+	"github.com/btcsuite/btcd/blockchain"
+	"github.com/btcsuite/btcd/wire"
 	"testing"
+	"time"
 
 	"github.com/btcsuite/btcutil"
 	"github.com/lightningnetwork/lnd/funding"
@@ -149,6 +152,68 @@ test:
 			}
 		}
 	}
+}
+
+// Partially open transaction, don't publish Transaction
+// Unlock inputs
+// Send input to new transaction, mine the new tx (somehow)
+// Assert channel is dropped
+func testChannelDoubleSpendFailFundingFlow(net *lntest.NetworkHarness, t *harnessTest) {
+
+	ctxb := context.Background()
+
+	carolCommitType := commitTypeTweakless
+	daveCommitType := commitTypeTweakless
+
+	// Based on the current tweak variable for Carol, we'll
+	// preferentially signal the legacy commitment format.  We do
+	// the same for Dave shortly below.
+	carolArgs := carolCommitType.Args()
+	alice := net.NewNode(t.t, "alice", carolArgs)
+	defer shutdownAndAssert(net, t, alice)
+
+	// Each time, we'll send Carol a new set of coins in order to
+	// fund the channel.
+	ctxt, _ := context.WithTimeout(ctxb, defaultTimeout)
+	net.SendCoins(ctxt, t.t, btcutil.SatoshiPerBitcoin, alice)
+
+	bobArgs := daveCommitType.Args()
+	bob := net.NewNode(t.t, "bob", bobArgs)
+	defer shutdownAndAssert(net, t, bob)
+
+	chanAmt := funding.MaxBtcFundingAmount
+	pushAmt := btcutil.Amount(100000)
+
+	if err := net.ConnectNodes(ctxt, alice, bob); err != nil {
+		t.Fatalf("unable to connect Alice's peer to Bob's: err %v", err)
+	}
+
+	// Check existing connection.
+	assertNumConnections(t, alice, bob, 1)
+
+	_, err := net.OpenPendingChannel(ctxb, alice, bob, chanAmt, pushAmt)
+	require.NoError(t.t, err, "error opening pending channel")
+
+	b, err := waitForTxInMempool(net.Miner.Client, minerMempoolTimeout)
+	justiceTx, err := net.Miner.Client.GetRawTransaction(b)
+
+	txDoubleSpend := &wire.MsgTx{Version: 3}
+	for _, tx := range justiceTx.MsgTx().TxIn {
+		txDoubleSpend.AddTxIn(tx)
+	}
+
+	txDoubleSpend.AddTxOut(&wire.TxOut{
+		Value: int64(100), PkScript: []byte{99, 88, 77}})
+
+	tx := []*btcutil.Tx{btcutil.NewTx(txDoubleSpend)}
+
+	err = blockchain.CheckTransactionSanity(tx[0])
+	require.NoError(t.t, err, "CheckTransactionSanity")
+	block, err := net.Miner.GenerateAndSubmitBlock(tx, 4, time.Now().Add(time.Hour))
+	require.NoError(t.t, err, "error spending")
+	print(block)
+	return
+
 }
 
 // basicChannelFundingTest is a sub-test of the main testBasicChannelFunding

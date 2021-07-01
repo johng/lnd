@@ -21,7 +21,7 @@ var allTestCases = []*testCase{
 	},
 	{
 		name: "basic funding flow",
-		test: testBasicChannelFunding,
+		test: testChannelDoubleSpendFailFundingFlow,
 	},
 	{
 		name: "unconfirmed channel funding",
