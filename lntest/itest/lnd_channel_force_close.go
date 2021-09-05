@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/lightningnetwork/lnd/funding"
 	"testing"
 
 	"github.com/btcsuite/btcd/blockchain"
@@ -206,6 +207,126 @@ func testCommitmentTransactionDeadline(net *lntest.NetworkHarness,
 		t.t, int64(feeRateLarge), feeRate, 0.01,
 		"expected fee rate:%d, got fee rate:%d", feeRateLarge, feeRate,
 	)
+}
+
+// testCommitmentTransactionDeadline tests that the anchor sweep transaction is
+// taking account of the deadline of the commitment transaction. It tests two
+// scenarios:
+//   1) when the CPFP is skipped, checks that the deadline is not used.
+//   2) when the CPFP is used, checks that the deadline is applied.
+// Note that whether the deadline is used or not is implicitly checked by its
+// corresponding fee rates.
+func testSendAliceForceClose(net *lntest.NetworkHarness,
+	t *harnessTest) {
+
+	const (
+		// feeRateConfDefault(sat/kw) is used when no conf target is
+		// set. This value will be returned by the fee estimator but
+		// won't be used because our commitment fee rate is capped by
+		// DefaultAnchorsCommitMaxFeeRateSatPerVByte.
+		feeRateDefault = 20000
+
+		// finalCTLV is used when Alice sends payment to Bob.
+		finalCTLV = 144
+
+		// deadline is used when Alice sweep the anchor. Notice there
+		// is a block padding of 3 added, such that the value of
+		// deadline is 147.
+		deadline = uint32(finalCTLV + routing.BlockPadding)
+	)
+
+	ctxb := context.Background()
+
+	// Before we start, set up the default fee rate and we will test the
+	// actual fee rate against it to decide whether we are using the
+	// deadline to perform fee estimation.
+	net.SetFeeEstimate(feeRateDefault)
+
+	// setupNode creates a new node and sends 1 btc to the node.
+	setupNode := func(name string) *lntest.HarnessNode {
+		// Create the node.
+		node := net.NewNode(t.t, name, commitTypeAnchors.Args())
+
+		// Send some coins to the node.
+		net.SendCoins(t.t, btcutil.SatoshiPerBitcoin, node)
+
+		// For neutrino backend, we need one additional UTXO to create
+		// the sweeping tx for the remote anchor.
+		if net.BackendCfg.Name() == lntest.NeutrinoBackendName {
+			net.SendCoins(t.t, btcutil.SatoshiPerBitcoin, node)
+		}
+
+		return node
+	}
+
+	ctxt, cancel := context.WithTimeout(ctxb, defaultTimeout)
+	defer cancel()
+
+	// Create two nodes, Alice and Bob.
+	alice := setupNode("Alice")
+	defer shutdownAndAssert(net, t, alice)
+
+	bob := setupNode("Bob")
+	defer shutdownAndAssert(net, t, bob)
+
+	// Connect Alice to Bob.
+	net.ConnectNodes(t.t, alice, bob)
+
+	net.EnsureConnected(t.t, alice, bob)
+
+	chanAmt := funding.MaxBtcFundingAmount
+	pushAmt := btcutil.Amount(100000)
+
+	// Open a channel between Alice and Bob.
+	chanPoint := openChannelAndAssert(
+		t, net, bob, alice, lntest.OpenChannelParams{
+			Amt:     chanAmt,
+			PushAmt: pushAmt,
+		},
+	)
+
+	req := &lnrpc.ListChannelsRequest{}
+	aliceChannel, err := alice.ListChannels(context.Background(), req)
+	require.NoError(t.t, err, "unable to obtain chan")
+
+	print(aliceChannel)
+
+	net.Miner.Client.Generate(10)
+
+	// Send a payment with a specified finalCTLVDelta, which will
+	// be used as our deadline later on when Alice force closes the
+	// channel.
+	_, err = alice.RouterClient.SendPaymentV2(
+		ctxt, &routerrpc.SendPaymentRequest{
+			Dest:           bob.PubKey[:],
+			Amt:            10e3,
+			PaymentHash:    makeFakePayHash(t),
+			TimeoutSeconds: 60,
+			FeeLimitMsat:   noFeeLimitMsat,
+		},
+	)
+	require.NoError(t.t, err, "unable to send alice htlc")
+
+	// Once the HTLC has cleared, all the nodes in our mini network
+	// should show that the HTLC has been locked in.
+	nodes := []*lntest.HarnessNode{alice, bob}
+	err = wait.NoError(func() error {
+		return assertNumActiveHtlcs(nodes, 1)
+	}, defaultTimeout)
+	require.NoError(t.t, err, "htlc mismatch")
+
+	// Alice force closes the channel.
+	_, _, err = net.CloseChannel(alice, chanPoint, true)
+	_, err = net.Miner.Client.Generate(200)
+	restartAlice, err := net.SuspendNode(alice)
+	require.NoError(t.t, err)
+
+	_, err = net.Miner.Client.Generate(200)
+	require.NoError(t.t, err)
+
+	err = restartAlice()
+	require.NoError(t.t, err)
+
 }
 
 // calculateTxnsFeeRate takes a list of transactions and estimates the fee rate
